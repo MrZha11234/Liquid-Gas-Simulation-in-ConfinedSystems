@@ -1,0 +1,92 @@
+clear
+#------------------------Initialization
+
+variable      nump equal 81920
+
+variable        L_boxA equal 512
+variable        L_boxz equal 50000
+variable        center equal 2500
+
+
+variable        seed equal 15689
+variable        seed1 equal ${seed}+1
+
+
+variable      T     equal 0.0062
+
+units           lj
+dimension       2
+boundary        p f p
+atom_style      atomic
+
+
+
+#------------------------System definition
+read_data N81920nSameKompGravitycoord.data          
+neighbor        0.3 bin  
+neigh_modify    every 1 delay 0 check yes
+
+mass * 1
+
+group A type 1
+
+
+
+
+
+
+#------------------------Saving
+write_data      initialKomp.xyz
+
+pair_style      table linear 30000 pppm
+pair_coeff      * * Komp_zetal1d8.table Kompaneets 25
+
+
+
+
+velocity A create ${T}  ${seed1} 
+reset_timestep 0
+
+
+
+
+
+
+
+#------------------------Running
+dump            1 A custom 15000  KompN81920nSameT0d0062.atom  id  type x y vx vy fx fy
+dump_modify     1 sort id
+
+compute 1 A msd com yes
+variable msdx equal c_1[1]
+variable msdy equal c_1[2]
+variable msdz equal c_1[3]
+variable msd equal  c_1[4]
+variable istep equal step 
+
+fix 2 A print 1000 "${istep} ${msdx} ${msdy} ${msdz} ${msd}" screen no file msdtrapKompN81920nSameT0d0062.dat
+
+
+variable force_coeff equal 4.03e-5*5120/${nump}
+
+compute coords A reduce sum x y z
+variable trapforcez atom -${force_coeff}
+
+fix 6 A addforce 0.0 v_trapforcez 0.0 every 1
+
+fix ywalls A wall/reflect ylo ${center} yhi ${L_boxz}
+
+
+
+
+thermo          1000
+thermo_style    custom step  temp etotal press fnorm fmax
+fix             1 A nvt temp ${T} ${T} 5.0
+
+comm_style tiled
+fix fixbalance A balance 1000 1.2 rcb
+
+
+
+timestep        1.0e-1
+run             90000000

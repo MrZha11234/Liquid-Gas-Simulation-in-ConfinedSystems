@@ -1,0 +1,119 @@
+clear
+#------------------------Initialization
+
+
+variable        L_box equal 120
+variable        L_boxz equal 100000
+
+variable        center equal 2500
+variable        top equal 20000
+
+variable        seed equal 15689
+variable        seed1 equal ${seed}+1
+
+variable      nump equal 23040
+variable      T     equal 0.22  
+variable      eta equal 0.06
+variable      rg equal 0.8
+variable      k equal -3.0/8.0*${eta}*2.0*(1.0+${rg})/(${rg}*${rg}*${rg})
+variable      rc equal 2.0+2*${rg}
+
+units           lj
+dimension       3
+boundary        p p f
+atom_style      atomic
+
+
+
+#------------------------System definition                             
+region          box          block 0 ${L_box} 0 ${L_box}  0 ${L_boxz} 
+region          half         block 0 ${L_box} 0 ${L_box}  ${center} ${L_boxz}
+region          mid          block 0 ${L_box} 0 ${L_box}  ${center} ${top}
+
+              
+
+
+create_box      1 box                                                
+create_atoms    1 random ${nump}    ${seed}  mid overlap 2 maxtry 10000           
+neighbor        0.3 bin  
+neigh_modify    every 1 delay 0 check yes
+
+
+mass * 1
+
+#set group all quat 1 0 0 0  # 清除旋转
+
+
+
+
+
+
+
+#------------------------Saving
+
+
+pair_style hybrid/overlay lj/cut 2.0 harmonic/cut
+
+pair_coeff      * * harmonic/cut ${k} ${rc}
+pair_coeff      * * lj/cut 1.0 2.0 
+
+
+pair_write 1 1 300000 r 1.5 4 Depletion.dat Depletion
+
+#pair_style yukawa 1.0 25
+#pair_coeff      1 1 1.0 25
+#pair_coeff      1 2 -1.0 25
+#pair_coeff      2 2 1.0 25
+
+pair_modify shift yes
+
+
+#minimize 1.0e-5 1.0e-7 1000000 10000000
+
+
+velocity all create ${T}  ${seed1} 
+reset_timestep 0
+
+
+
+
+
+
+
+#------------------------Running
+dump            1 all custom 50000  DepleN23040_rg=0.8_T0d21.atom  id  type x y z vx vy z fx fy fz
+dump_modify     1 sort id
+
+compute 1 all msd com yes
+variable msdx equal c_1[1]
+variable msdy equal c_1[2]
+variable msdz equal c_1[3]
+variable msd equal  c_1[4]
+variable istep equal step 
+
+fix 2 all print 1000 "${istep} ${msdx} ${msdy} ${msdz} ${msd}" screen no file msdDepleN23040_rg=0.8_T0d21.dat
+
+variable force_coeff equal 100.0/${nump}
+compute coords all reduce sum x y z
+variable trapforcez atom -${force_coeff}
+
+fix 6 all addforce 0.0 0.0 v_trapforcez every 1
+
+fix zwalls all wall/reflect zlo ${center} zhi ${L_boxz}
+
+
+
+
+
+thermo          1000
+thermo_style    custom step  temp etotal press fnorm fmax
+fix             1 all nvt temp ${T} ${T} 100.0
+
+comm_style tiled
+fix fixbalance all balance 1000 1.2 rcb
+
+
+
+timestep        1.0e-3
+run             900000000
+
